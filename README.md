@@ -1,4 +1,4 @@
-# Tinc deploy script
+# Tinc deploy
 
 
 ## Dependencies
