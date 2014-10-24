@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 
-import argparse, importlib, os, socket
+import argparse, imp, importlib, os, socket
 from tinc import *
 
 def main():
-    # print "Network construction machine v0.0."
 
     parser = argparse.ArgumentParser()
     parser.add_argument('network',  
@@ -24,6 +23,7 @@ def main():
 
     parser_init = subparsers.add_parser('init')
     parser_init.add_argument('-d', '--directory', default='/etc/tinc/')
+    parser_init.add_argument('-b', '--bucket')
     parser_init.set_defaults(func=init)
 
     args = parser.parse_args()
@@ -47,9 +47,37 @@ def generate(args):
         print network.generate_tinc_down()   
 
 def init(args):
+
+    network_path = os.path.join(args.directory, args.network)
+
+    # create network directories, continue if they already exist
+    hosts_dir = os.path.join(args.directory, args.network, 'hosts')
+    try: 
+        os.makedirs(hosts_dir)
+    except OSError:
+        if not os.path.isdir(hosts_dir):
+            raise
+
+    # setup s3 connection
+    import boto
+    conn = boto.connect_s3()
     
+    # get config file from bucket
+    if args.bucket:
+        bucket_name = args.bucket
+    else:
+        bucket_name = args.network
+
+    bucket = conn.get_bucket(bucket_name)
+    
+    config_filename = args.network+'.py'
+    print "Downloading config file %s." % config_filename
+    config_path = os.path.join(network_path, config_filename)
+    config_key = bucket.get_key(config_filename)
+    config_key.get_contents_to_filename(config_path)    
+
     # import module with same name as network
-    network_module = importlib.import_module(args.network)
+    network_module = imp.load_source(args.network, config_path)
 
     # get network object, also same name as network
     network = getattr(network_module, args.network)
@@ -59,18 +87,28 @@ def init(args):
         print "Error: Node %s not defined in config file, aborting." % args.hostname
         exit(1)
 
-    # create network directories, continue if they already exist
-    hosts_dir = os.path.join(args.directory, network.name, 'hosts')
-    try: 
-        os.makedirs(hosts_dir)
-    except OSError:
-        if not os.path.isdir(hosts_dir):
-            raise
+    # write config file and scripts
+    tinc_conf_filename = os.path.join(network_path, 'tinc.conf')
+    print "Writing %s" % tinc_conf_filename
+    tinc_conf = open(tinc_conf_filename, 'w')
+    tinc_conf.write(network.generate_tinc_conf(args.hostname))
+    tinc_conf.close()
 
-    # initialize s3 connection
-    import boto
-    conn = boto.connect_s3()
-    bucket = conn.get_bucket(network.bucket)
+    # write config file and scripts
+    tinc_up_filename = os.path.join(network_path, 'tinc-up')
+    print "Writing %s" % tinc_up_filename
+    tinc_up = open(tinc_up_filename, 'w')
+    os.chmod(tinc_up_filename, 0744)
+    tinc_up.write(network.generate_tinc_up(args.hostname))
+    tinc_up.close()
+
+    # write config file and scripts
+    tinc_down_filename = os.path.join(network_path, 'tinc-down')
+    print "Writing %s" % tinc_down_filename
+    tinc_down = open(tinc_down_filename, 'w')
+    os.chmod(tinc_down_filename, 0744)
+    tinc_down.write(network.generate_tinc_down())
+    tinc_down.close()
 
     # generate keypair if one doesn't exist already
     privkey_filename = os.path.join(args.directory, network.name, 'rsa_key.priv')
@@ -80,25 +118,29 @@ def init(args):
         RSAkey = RSA.generate(2048)
         privkey_file = open(privkey_filename, 'w')
         privkey_file.write(RSAkey.exportKey())
+        privkey_file.close()
+        os.chmod(privkey_filename, 0400)
 
         pubkey_key = "hosts/%s" % args.hostname
         if bucket.get_key(pubkey_key):
-            print "Warning: Public key already exists on S3, making a copy and overwriting it."
+            print "WARNING: Public key already exists on S3, making a copy and overwriting it."
             bucket.copy_key(pubkey_key+'.old', bucket.name, pubkey_key)
 
         pubkey_key = bucket.new_key(pubkey_key)
+        print "Uploading public key to S3."
         pubkey_key.set_contents_from_string(RSAkey.publickey().exportKey())
         pubkey_key.close()
 
     # generate host files from S3 keys and write to hosts dir 
     for node in network.groups[0].nodes:
-        print "Generating public key file in hosts/%s" % node.name
         pubkey_key = bucket.get_key("hosts/%s" % node.name)
         if pubkey_key is None:
-            print "Warning: public key for %s not found." % node.name
+            print "WARNING: public key for %s not found." % node.name
             continue
         pubkey = pubkey_key.get_contents_as_string()
-        keyfile = open(os.path.join(hosts_dir, node.name), 'w')
+        public_key_filename = os.path.join(hosts_dir, node.name)
+        keyfile = open(public_key_filename, 'w')
+        print "Writing public key file %s" % public_key_filename
         keyfile.write(pubkey)
         keyfile.write("\n")
         keyfile.write("Subnet = %s\n" % node.subnet)
