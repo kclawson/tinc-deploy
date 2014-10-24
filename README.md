@@ -7,7 +7,8 @@
 * python-crypto
 * boto >= 2.33
 
-To install on Ubuntu run
+To install on Ubuntu, run
+
     $ sudo apt-get install python-crypto
     $ sudo pip install boto>= 2.33
 
