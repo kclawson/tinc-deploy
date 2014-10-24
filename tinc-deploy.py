@@ -162,6 +162,10 @@ def update(args):
     hosts_dir = os.path.join(network_path, 'hosts')
     config_path = os.path.join(network_path, args.network+'.py')
 
+    if not os.path.isfile(config_path):
+        print "ERROR: Couldn't load config file %s. Try using init command first." % config_path
+        exit(1)
+
     # import module with same name as network
     network_module = imp.load_source(args.network, config_path)
 
