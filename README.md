@@ -10,6 +10,6 @@
 
 To install on Ubuntu, run
 
-    $ sudo apt-get install python-crypto python-netaddr tinc
+    $ sudo apt-get install python-crypto python-netaddr python-pip tinc
     $ sudo pip install 'boto>= 2.33'
 
