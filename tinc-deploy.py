@@ -26,6 +26,10 @@ def main():
     parser_init.add_argument('-b', '--bucket')
     parser_init.set_defaults(func=init)
 
+    parser_update = subparsers.add_parser('update')
+    parser_update.add_argument('-d', '--directory', default='/etc/tinc/')
+    parser_update.set_defaults(func=update)
+
     args = parser.parse_args()
     args.func(args) 
 
@@ -131,6 +135,9 @@ def init(args):
         pubkey_key.set_contents_from_string(RSAkey.publickey().exportKey())
         pubkey_key.close()
 
+    update_hosts(network, bucket, hosts_dir)
+
+def update_hosts(network, bucket, hosts_dir):
     # generate host files from S3 keys and write to hosts dir 
     for node in network.groups[0].nodes:
         pubkey_key = bucket.get_key("hosts/%s" % node.name)
@@ -138,14 +145,42 @@ def init(args):
             print "WARNING: public key for %s not found." % node.name
             continue
         pubkey = pubkey_key.get_contents_as_string()
-        public_key_filename = os.path.join(hosts_dir, node.name)
-        keyfile = open(public_key_filename, 'w')
-        print "Writing public key file %s" % public_key_filename
+        pubkey_filename = os.path.join(hosts_dir, node.name)
+        print "Writing public key file %s" % pubkey_filename
+        keyfile = open(pubkey_filename, 'w')
         keyfile.write(pubkey)
         keyfile.write("\n")
-        keyfile.write("Subnet = %s\n" % node.subnet)
+        keyfile.write("Subnet = %s\n" % node.subnet.cidr)
         keyfile.write("Address = %s\n" % node.address)
         keyfile.close()
+        os.chmod(pubkey_filename, 0400)
+
+def update(args):
+
+    # config directories
+    network_path = os.path.join(args.directory, args.network)
+    hosts_dir = os.path.join(network_path, 'hosts')
+    config_path = os.path.join(network_path, args.network+'.py')
+
+    # import module with same name as network
+    network_module = imp.load_source(args.network, config_path)
+
+    # get network object, also same name as network
+    network = getattr(network_module, args.network)
+
+    # initialize bucket
+    import boto
+    conn = boto.connect_s3()
+    bucket = conn.get_bucket(network.bucket)
+
+    # write config file and scripts
+    tinc_conf_filename = os.path.join(network_path, 'tinc.conf')
+    print "Writing %s" % tinc_conf_filename
+    tinc_conf = open(tinc_conf_filename, 'w')
+    tinc_conf.write(network.generate_tinc_conf(args.hostname))
+    tinc_conf.close()
+
+    update_hosts(network, bucket, hosts_dir)
 
 if __name__ == "__main__":
     main()
