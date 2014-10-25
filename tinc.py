@@ -7,8 +7,8 @@ class vpn:
 		self.bucket = bucket
 		self.groups = list()
 
-	def add_group(self, graph):
-		new_group = group(graph)
+	def add_group(self):
+		new_group = group()
 		self.groups.append(new_group)
 		return new_group
 
@@ -25,8 +25,8 @@ class vpn:
 		config  = "#!/bin/bash\n"
 		config += "\n"
 		config += "ifconfig $INTERFACE %s netmask %s\n" % (
-			     	self.groups[0].get_node(hostname).subnet.ip,
-			     	self.subnet.netmask )
+					self.groups[0].get_node(hostname).subnet.ip,
+					self.subnet.netmask )
 		
 		return config
 
@@ -40,9 +40,8 @@ class vpn:
 		pass
 
 class group:
-	def __init__(self, graph):
+	def __init__(self):
 		self.nodes = list()
-		self.graph = graph
 
 	def add_node(self, **kwargs):
 		self.nodes.append(node(**kwargs))
