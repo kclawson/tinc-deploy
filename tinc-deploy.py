@@ -12,10 +12,6 @@ def main():
 
     subparsers = parser.add_subparsers()
 
-    parser_dump_all = subparsers.add_parser('dump-all',
-                    help='show raw network info')
-    parser_dump_all.set_defaults(func=dump)
-
     parser_generate = subparsers.add_parser('generate',
                     help='generate configuration files')
     parser_generate.add_argument('config_file')
@@ -36,12 +32,6 @@ def main():
 
     args = parser.parse_args()
     args.func(args)
-
-def dump(args):
-    network_module = importlib.import_module(args.network)
-    network = getattr(network_module, args.network)
-    print "Name = " + network.name
-    print "Network = " + network.subnet
 
 def generate(args):
     network_module = importlib.import_module(args.network)
