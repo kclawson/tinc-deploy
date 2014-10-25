@@ -6,17 +6,17 @@ from tinc import *
 def main():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('network',  
+    parser.add_argument('network',
         help='network name')
     parser.add_argument('-n', '--hostname', default=socket.gethostname())
 
     subparsers = parser.add_subparsers()
 
-    parser_dump_all = subparsers.add_parser('dump-all', 
+    parser_dump_all = subparsers.add_parser('dump-all',
                     help='show raw network info')
     parser_dump_all.set_defaults(func=dump)
-    
-    parser_generate = subparsers.add_parser('generate', 
+
+    parser_generate = subparsers.add_parser('generate',
                     help='generate configuration files')
     parser_generate.add_argument('config_file')
     parser_generate.set_defaults(func=generate)
@@ -35,7 +35,7 @@ def main():
     parser_push_config.set_defaults(func=push_config)
 
     args = parser.parse_args()
-    args.func(args) 
+    args.func(args)
 
 def dump(args):
     network_module = importlib.import_module(args.network)
@@ -52,7 +52,7 @@ def generate(args):
     elif args.config_file == "tinc-up":
         print network.generate_tinc_up(args.hostname)
     elif args.config_file == "tinc-down":
-        print network.generate_tinc_down()   
+        print network.generate_tinc_down()
 
 def init(args):
 
@@ -60,7 +60,7 @@ def init(args):
 
     # create network directories, continue if they already exist
     hosts_dir = os.path.join(args.directory, args.network, 'hosts')
-    try: 
+    try:
         os.makedirs(hosts_dir)
     except OSError:
         if not os.path.isdir(hosts_dir):
@@ -69,7 +69,7 @@ def init(args):
     # setup s3 connection
     import boto
     conn = boto.connect_s3()
-    
+
     # get config file from bucket
     if args.bucket:
         bucket_name = args.bucket
@@ -77,12 +77,12 @@ def init(args):
         bucket_name = args.network
 
     bucket = conn.get_bucket(bucket_name)
-    
+
     config_filename = args.network+'.py'
     print "Downloading config file %s." % config_filename
     config_path = os.path.join(network_path, config_filename)
     config_key = bucket.get_key(config_filename)
-    config_key.get_contents_to_filename(config_path)    
+    config_key.get_contents_to_filename(config_path)
 
     # import module with same name as network
     network_module = imp.load_source(args.network, config_path)
@@ -142,7 +142,7 @@ def init(args):
     update_hosts(network, bucket, hosts_dir)
 
 def update_hosts(network, bucket, hosts_dir):
-    # generate host files from S3 keys and write to hosts dir 
+    # generate host files from S3 keys and write to hosts dir
     for node in network.groups[0].nodes:
         pubkey_key = bucket.get_key("hosts/%s" % node.name)
         if pubkey_key is None:
@@ -215,7 +215,7 @@ def push_config(args):
 
     print "Copying original config file to %s" % backup_name
     config_key.copy(network.bucket, backup_name)
-    
+
     print "Copying new config file from %s" % config_file_path
     config_key.set_contents_from_filename(config_file_path)
     config_key.close()
