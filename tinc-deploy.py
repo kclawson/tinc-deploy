@@ -30,6 +30,10 @@ def main():
     parser_update.add_argument('-d', '--directory', default='/etc/tinc/')
     parser_update.set_defaults(func=update)
 
+    parser_push_config = subparsers.add_parser('push-config')
+    parser_push_config.add_argument('-d', '--directory', default='/etc/tinc/')
+    parser_push_config.set_defaults(func=push_config)
+
     args = parser.parse_args()
     args.func(args) 
 
@@ -185,6 +189,38 @@ def update(args):
     tinc_conf.close()
 
     update_hosts(network, bucket, hosts_dir)
+
+
+def push_config(args):
+    import boto
+    conn = boto.connect_s3()
+
+    # config directories
+    network_path = os.path.join(args.directory, args.network)
+    hosts_dir = os.path.join(network_path, 'hosts')
+    config_filename = args.network+'.py'
+    config_file_path = os.path.join(network_path, config_filename)
+
+    # import network config
+    network_module = imp.load_source(args.network, config_file_path)
+    network = getattr(network_module, args.network)
+    bucket = conn.get_bucket(network.bucket)
+
+    # keep copy of current config, append timestamp to name
+    import datetime
+    timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H%M%S')
+    backup_name = config_filename + '.' + timestamp
+
+    config_key = bucket.get_key(config_filename)
+
+    print "Copying original config file to %s" % backup_name
+    config_key.copy(network.bucket, backup_name)
+    
+    print "Copying new config file from %s" % config_file_path
+    config_key.set_contents_from_filename(config_file_path)
+    config_key.close()
+
+
 
 if __name__ == "__main__":
     main()
